@@ -1,0 +1,13 @@
+[package]
+name = "po-plamo"
+version = "0.1.0"
+edition = "2024"
+description = "Translate gettext PO files with PLaMo Translate"
+license = "Apache-2.0"
+repository = "https://github.com/conao3/rust-po-plamo"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive", "env"] }
+plamo-tr = { git = "https://github.com/conao3/rust-plamo-tr", version = "0.1.0" }
+regex = "1.13.1"
