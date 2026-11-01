@@ -24,7 +24,10 @@
             pname = "po-plamo";
             version = "0.1.0";
             src = pkgs.lib.cleanSource ./.;
-            cargoLock.lockFile = ./Cargo.lock;
+            cargoLock = {
+              lockFile = ./Cargo.lock;
+              outputHashes."plamo-tr-0.1.0" = "sha256-dhqyW7CiN/9NX52pZ7OBrnePc4veSnqG8aFqgrMKaEM=";
+            };
             meta = {
               description = "Translate gettext PO files with PLaMo Translate";
               homepage = "https://github.com/conao3/rust-po-plamo";

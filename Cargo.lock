@@ -799,6 +799,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 [[package]]
 name = "plamo-tr"
 version = "0.1.0"
+source = "git+https://github.com/conao3/rust-plamo-tr#74731094d7b158b2e65ea430f3c4cd42ef5bc3ba"
 dependencies = [
  "anyhow",
  "clap",
