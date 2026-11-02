@@ -1,3 +1,6 @@
+mod error;
+mod grammar;
+mod output;
 mod po;
 mod protect;
 
@@ -7,73 +10,153 @@ use std::sync::Mutex;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result, bail};
-use clap::{Parser, ValueEnum};
+use anyhow::{Context, Result};
+use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use plamo_tr::api::{Auth, Format, Options, Translator};
 use plamo_tr::lang::{Direction, parse_language, resolve};
 use regex::Regex;
+use serde::Serialize;
+use serde_json::Value;
 
+use crate::grammar::{CliInputArgs, SkeletonKind};
+use crate::output::{OutputFormat, Response};
 use crate::po::{PoFile, State};
 use crate::protect::{Protected, protect};
 
-/// Fill gettext PO files with translations from PLaMo Translate.
-///
-/// Untranslated entries, and fuzzy entries that carry the machine translation
-/// comment, are translated and marked with that comment. Fuzzy entries without
-/// it hold a human translation and are left for a person to review.
 #[derive(Parser)]
-#[command(version)]
+#[command(
+    name = "po-plamo",
+    version,
+    about = "Fill gettext PO files with translations from PLaMo Translate"
+)]
 struct Cli {
-    /// PO files to translate in place.
-    #[arg(required = true)]
-    files: Vec<PathBuf>,
+    /// Output format
+    #[arg(long, global = true, help_heading = "Global Options", value_enum, default_value_t = OutputFormat::Json)]
+    output: OutputFormat,
+    /// JMESPath expression applied to the output
+    #[arg(
+        long,
+        global = true,
+        help_heading = "Global Options",
+        value_name = "JMESPATH"
+    )]
+    query: Option<String>,
+    /// Print debug logs to stderr
+    #[arg(long, global = true, help_heading = "Global Options")]
+    debug: bool,
+    #[command(subcommand)]
+    command: Command,
+}
 
-    /// Source language of the msgids (auto-detected when omitted).
-    #[arg(short, long, value_parser = parse_language)]
-    source: Option<&'static str>,
+#[derive(Subcommand)]
+enum Command {
+    /// Translate the entries of gettext PO files
+    #[command(subcommand, name = "po-file")]
+    PoFile(PoFileCommand),
+}
 
-    /// Target language (the Language header of each file when omitted).
-    #[arg(short, long, value_parser = parse_language)]
-    target: Option<&'static str>,
+#[derive(Subcommand)]
+enum PoFileCommand {
+    /// Translate untranslated entries, and fuzzy entries that carry the machine translation comment, in place.
+    /// Fuzzy entries without the comment hold a human translation and are left for a person to review.
+    /// Progress goes to stderr
+    #[command(name = "translate-po-files")]
+    TranslatePoFiles(Box<TranslatePoFilesArgs>),
+}
 
-    /// Markup of the msgids. With html, the contents of code, kbd, pre, samp,
-    /// and var elements are not translated, and a translation that changes the
-    /// tags is rejected.
+#[derive(Args)]
+struct TranslatePoFilesArgs {
+    /// PO files to translate in place (space-separated)
+    #[arg(long, num_args = 1.., required = true)]
+    po_files: Vec<PathBuf>,
+
+    /// Source language of the msgids (auto-detected when omitted)
+    #[arg(long, value_parser = parse_language)]
+    source_language: Option<&'static str>,
+
+    /// Target language (the Language header of each file when omitted)
+    #[arg(long, value_parser = parse_language)]
+    target_language: Option<&'static str>,
+
+    /// Markup of the msgids. With html, the contents of code, kbd, pre, samp, and var elements are not translated, and a translation that changes the tags is rejected
     #[arg(long, value_enum, default_value_t = MarkupArg::Plain)]
     format: MarkupArg,
 
-    /// Number of msgids sent in one request.
+    /// Number of msgids sent in one request
     #[arg(long, default_value_t = 20)]
     batch_size: usize,
 
-    /// Upper bound on the characters sent in one request.
+    /// Upper bound on the characters sent in one request
     #[arg(long, default_value_t = 4000)]
     batch_chars: usize,
 
-    /// Number of requests in flight.
-    #[arg(short, long, default_value_t = 4)]
+    /// Number of requests in flight
+    #[arg(long, default_value_t = 4)]
     jobs: usize,
 
-    /// Translate at most this many distinct msgids, then stop.
+    /// Translate at most this many distinct msgids, then stop
     #[arg(long)]
     limit: Option<usize>,
 
-    /// Write the files after this many seconds of work, and at the end.
+    /// Write the files after this many seconds of work, and at the end
     #[arg(long, default_value_t = 60)]
     save_every: u64,
 
-    /// JSON file with the apiKey and refreshToken of a PLaMo Translate login.
+    /// JSON file with the apiKey and refreshToken of a PLaMo Translate login
     #[arg(long, env = "PLAMO_AUTH_FILE")]
     auth_file: Option<PathBuf>,
 
-    /// Leave entries untranslated when one of their extracted comments (`#.`)
-    /// matches this regular expression, such as `<pre>` for code examples.
-    #[arg(long, value_name = "REGEX")]
+    /// Leave entries untranslated when one of their extracted comments (`#.`) matches this regular expression, such as `<pre>` for code examples
+    #[arg(long, value_name = "REGEX", allow_hyphen_values = true)]
     skip_context: Option<Regex>,
 
-    /// Only report how many entries would be translated.
-    #[arg(long)]
+    /// Only report how many entries would be translated
+    #[arg(long, overrides_with = "no_dry_run")]
     dry_run: bool,
+
+    /// Turn off --dry-run
+    #[arg(long, overrides_with = "dry_run")]
+    no_dry_run: bool,
+
+    #[command(flatten)]
+    input: CliInputArgs,
+}
+
+#[derive(Default, Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct TranslatePoFilesOutput {
+    po_files: Vec<String>,
+    dry_run: bool,
+    pending_msgid_count: usize,
+    pending_entry_count: usize,
+    skipped_entry_count: usize,
+    human_fuzzy_entry_count: usize,
+    translated_msgid_count: usize,
+    rejected_msgid_count: usize,
+}
+
+#[derive(Debug)]
+struct TargetError(String);
+
+impl std::fmt::Display for TargetError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for TargetError {}
+
+fn target_error(message: String) -> anyhow::Error {
+    anyhow::Error::new(TargetError(message))
+}
+
+fn classify(error: anyhow::Error) -> error::Error {
+    let message = format!("{error:#}");
+    if error.chain().any(|cause| cause.is::<TargetError>()) {
+        error::target(message)
+    } else {
+        error::other(message)
+    }
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -204,41 +287,52 @@ fn save(path: &Path, file: &PoFile) -> Result<()> {
     std::fs::rename(&temporary, path).with_context(|| format!("failed to write {}", path.display()))
 }
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
-    let format = Format::from(cli.format);
-    if cli.batch_size == 0 || cli.jobs == 0 {
-        bail!("--batch-size and --jobs must be at least 1");
-    }
+fn translate_po_files(args: &TranslatePoFilesArgs) -> Result<TranslatePoFilesOutput> {
+    let format = Format::from(args.format);
+    let mut output = TranslatePoFilesOutput {
+        po_files: args
+            .po_files
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect(),
+        dry_run: args.dry_run,
+        ..TranslatePoFilesOutput::default()
+    };
 
     let mut files = Vec::new();
-    for path in &cli.files {
+    for path in &args.po_files {
         let text = std::fs::read_to_string(path)
-            .with_context(|| format!("failed to read {}", path.display()))?;
-        let file =
-            PoFile::parse(&text).with_context(|| format!("failed to parse {}", path.display()))?;
+            .map_err(|error| target_error(format!("failed to read {}: {error}", path.display())))?;
+        let file = PoFile::parse(&text).map_err(|error| {
+            target_error(format!("failed to parse {}: {error:#}", path.display()))
+        })?;
         files.push(file);
     }
 
     let mut targets: HashMap<&'static str, HashMap<String, Vec<Target>>> = HashMap::new();
     let mut order: HashMap<&'static str, Vec<String>> = HashMap::new();
-    let mut human_fuzzy = 0;
-    let mut skipped = 0;
     for (index, file) in files.iter().enumerate() {
-        let target = match (cli.target, file.language()) {
+        let target = match (args.target_language, file.language()) {
             (Some(target), _) => target,
-            (None, Some(language)) => parse_language(&language).map_err(anyhow::Error::msg)?,
-            (None, None) => bail!(
-                "{} has no Language header; pass --target",
-                cli.files[index].display()
-            ),
+            (None, Some(language)) => parse_language(&language).map_err(|error| {
+                target_error(format!(
+                    "{}: Language header: {error}",
+                    args.po_files[index].display()
+                ))
+            })?,
+            (None, None) => {
+                return Err(target_error(format!(
+                    "{} has no Language header; pass --target-language",
+                    args.po_files[index].display()
+                )));
+            }
         };
         for (entry_index, entry) in file.entries().iter().enumerate() {
             let pending = match entry.state() {
                 State::Untranslated => true,
                 State::Fuzzy if entry.is_machine_translated() => true,
                 State::Fuzzy => {
-                    human_fuzzy += 1;
+                    output.human_fuzzy_entry_count += 1;
                     false
                 }
                 _ => false,
@@ -246,12 +340,12 @@ fn main() -> Result<()> {
             if !pending {
                 continue;
             }
-            if let Some(skip) = &cli.skip_context
+            if let Some(skip) = &args.skip_context
                 && entry
                     .extracted_comments()
                     .any(|comment| skip.is_match(comment))
             {
-                skipped += 1;
+                output.skipped_entry_count += 1;
                 continue;
             }
             let msgid = entry.msgid();
@@ -266,24 +360,28 @@ fn main() -> Result<()> {
         }
     }
 
-    let total: usize = order.values().map(Vec::len).sum();
-    let entries: usize = targets
+    output.pending_msgid_count = order.values().map(Vec::len).sum();
+    output.pending_entry_count = targets
         .values()
         .flat_map(|t| t.values())
         .map(Vec::len)
         .sum();
     eprintln!(
-        "{total} distinct msgids in {entries} entries to translate; {skipped} entries skipped by --skip-context; {human_fuzzy} fuzzy entries with a human translation left as is"
+        "{} distinct msgids in {} entries to translate; {} entries skipped by --skip-context; {} fuzzy entries with a human translation left as is",
+        output.pending_msgid_count,
+        output.pending_entry_count,
+        output.skipped_entry_count,
+        output.human_fuzzy_entry_count
     );
-    if cli.dry_run || total == 0 {
-        return Ok(());
+    if args.dry_run || output.pending_msgid_count == 0 {
+        return Ok(output);
     }
 
-    let Some(auth_file) = &cli.auth_file else {
-        bail!("pass --auth-file or set PLAMO_AUTH_FILE");
-    };
-    let translator = Translator::sign_in(&Auth::load(auth_file)?)?;
-    let mut remaining = cli.limit.unwrap_or(usize::MAX);
+    let auth_file = args.auth_file.as_ref().context("auth file is required")?;
+    let auth = Auth::load(auth_file)?;
+    let translator = Translator::sign_in(&auth)
+        .map_err(|error| target_error(format!("PLaMo Translate sign-in failed: {error:#}")))?;
+    let mut remaining = args.limit.unwrap_or(usize::MAX);
     let mut translated = 0;
     let mut rejected = 0;
     for (target, mut texts) in order {
@@ -292,8 +390,9 @@ fn main() -> Result<()> {
         }
         texts.truncate(remaining);
         remaining -= texts.len();
-        let direction = match cli.source {
-            Some(source) => resolve(Some(source), Some(target), "")?,
+        let direction = match args.source_language {
+            Some(source) => resolve(Some(source), Some(target), "")
+                .map_err(|error| target_error(format!("{error:#}")))?,
             None => Direction {
                 source: None,
                 target,
@@ -304,13 +403,13 @@ fn main() -> Result<()> {
             format,
             writing_style: None,
         };
-        let queue = Mutex::new(batches(texts, cli.batch_size, cli.batch_chars));
+        let queue = Mutex::new(batches(texts, args.batch_size, args.batch_chars));
         let batch_count = queue.lock().unwrap().len();
         let (sender, receiver) = mpsc::channel::<Vec<(String, Option<String>)>>();
         let by_text = &targets[target];
 
         std::thread::scope(|scope| -> Result<()> {
-            for _ in 0..cli.jobs {
+            for _ in 0..args.jobs {
                 let sender = sender.clone();
                 let queue = &queue;
                 let translator = &translator;
@@ -350,9 +449,9 @@ fn main() -> Result<()> {
                         dirty.insert(target.file);
                     }
                 }
-                if last_save.elapsed() >= Duration::from_secs(cli.save_every) {
+                if last_save.elapsed() >= Duration::from_secs(args.save_every) {
                     for &index in &dirty {
-                        save(&cli.files[index], &files[index])?;
+                        save(&args.po_files[index], &files[index])?;
                     }
                     dirty.clear();
                     last_save = Instant::now();
@@ -362,13 +461,109 @@ fn main() -> Result<()> {
                 }
             }
             for &index in &dirty {
-                save(&cli.files[index], &files[index])?;
+                save(&args.po_files[index], &files[index])?;
             }
             Ok(())
         })?;
     }
-    eprintln!("{translated} msgids translated, {rejected} left untranslated");
+    output.translated_msgid_count = translated;
+    output.rejected_msgid_count = rejected;
+    Ok(output)
+}
+
+fn to_value<T: Serialize>(value: &T) -> error::Result<Value> {
+    serde_json::to_value(value).map_err(|error| error::other(error.to_string()))
+}
+
+fn output_skeleton(path: &[String]) -> error::Result<Value> {
+    match path.last().map(String::as_str) {
+        Some("translate-po-files") => to_value(&TranslatePoFilesOutput {
+            po_files: vec![String::new()],
+            ..TranslatePoFilesOutput::default()
+        }),
+        _ => Err(error::parameter(
+            "--generate-cli-skeleton needs a command and a subcommand",
+        )),
+    }
+}
+
+fn run() -> error::Result<()> {
+    let mut root = Cli::command();
+    root.build();
+    let prepared = grammar::prepare(&root, std::env::args_os().collect())?;
+    if prepared.argv.iter().any(|token| token == "--debug") {
+        eprintln!("debug: argv {:?}", &prepared.argv[1..]);
+    }
+
+    if let Some(kind) = prepared.skeleton {
+        let mut command = &root;
+        for name in &prepared.path {
+            command = command
+                .find_subcommand(name)
+                .ok_or_else(|| error::other(format!("unknown subcommand {name}")))?;
+        }
+        if command.has_subcommands() {
+            return Err(error::parameter(
+                "--generate-cli-skeleton needs a command and a subcommand",
+            ));
+        }
+        let value = match kind {
+            SkeletonKind::Input => grammar::input_skeleton(command),
+            SkeletonKind::Output => output_skeleton(&prepared.path)?,
+        };
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&value)
+                .map_err(|error| error::other(error.to_string()))?
+        );
+        return Ok(());
+    }
+
+    let cli = match Cli::try_parse_from(&prepared.argv) {
+        Ok(cli) => cli,
+        Err(error) => {
+            let code = if error.use_stderr() { 252 } else { 0 };
+            let _ = error.print();
+            std::process::exit(code);
+        }
+    };
+
+    if let Some(query) = &cli.query {
+        output::compile_query(query)?;
+    }
+    let Command::PoFile(PoFileCommand::TranslatePoFiles(args)) = cli.command;
+    if args.batch_size == 0 || args.jobs == 0 {
+        return Err(error::parameter(
+            "--batch-size and --jobs must be at least 1",
+        ));
+    }
+    if args.auth_file.is_none() && !args.dry_run {
+        return Err(error::parameter(
+            "pass --auth-file or set PLAMO_AUTH_FILE (or use --dry-run)",
+        ));
+    }
+    let value = to_value(&translate_po_files(&args).map_err(classify)?)?;
+    print!(
+        "{}",
+        output::render(
+            "TranslatePoFiles",
+            Response { value, text: None },
+            cli.output,
+            cli.query.as_deref()
+        )?
+    );
     Ok(())
+}
+
+fn main() {
+    let code = match run() {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("error: {error}");
+            error.exit_code()
+        }
+    };
+    std::process::exit(code);
 }
 
 #[cfg(test)]
