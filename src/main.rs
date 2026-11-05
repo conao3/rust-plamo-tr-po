@@ -25,7 +25,7 @@ use crate::protect::{Protected, protect};
 
 #[derive(Parser)]
 #[command(
-    name = "po-plamo",
+    name = "plamo-tr-po",
     version,
     about = "Fill gettext PO files with translations from PLaMo Translate"
 )]

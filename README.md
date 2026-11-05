@@ -1,4 +1,4 @@
-# po-plamo
+# plamo-tr-po
 
 Fill gettext PO files with machine translations from [PLaMo Translate](https://translate.preferredai.jp/), using the [plamo-tr](https://github.com/conao3/rust-plamo-tr) library.
 
@@ -7,7 +7,7 @@ This is an unofficial tool and is not affiliated with Preferred Networks.
 ## Usage
 
 ```console
-$ po-plamo po-file translate-po-files --source-language en --format html --skip-context "<(pre|style|script)>" --po-files po/emacs.ja.po
+$ plamo-tr-po po-file translate-po-files --source-language en --format html --skip-context "<(pre|style|script)>" --po-files po/emacs.ja.po
 108 distinct msgids in 108 entries to translate; 13 entries skipped by --skip-context; 0 fuzzy entries with a human translation left as is
 {
   "PoFiles": [
@@ -23,7 +23,7 @@ $ po-plamo po-file translate-po-files --source-language en --format html --skip-
 }
 ```
 
-`po-plamo` edits the files in place:
+`plamo-tr-po` edits the files in place:
 
 - It translates untranslated entries, and fuzzy entries that it translated before. Each translation gets the translator comment `# Machine-translated by PLaMo Translate.`, the `fuzzy` flag and the previous msgid (`#|`) are removed.
 - Fuzzy entries without that comment hold a human translation, and are left for a person to review. Remove the comment from an entry after you correct its translation by hand.
@@ -50,19 +50,19 @@ A rejected or failed batch is retried one msgid at a time. A msgid whose transla
 
 ### Command line
 
-Commands follow the AWS CLI grammar: `po-plamo [global options] <command> <subcommand> [--parameter value ...]`.
+Commands follow the AWS CLI grammar: `plamo-tr-po [global options] <command> <subcommand> [--parameter value ...]`.
 
 - A value starting with `file://` is read from that file, and `file:///dev/stdin` reads standard input.
 - `--cli-input-json file://input.json` passes the parameters as a JSON object keyed by the PascalCase parameter names (`{"PoFiles": ["po/emacs.ja.po"], "DryRun": true}`); parameters on the command line take precedence. `--generate-cli-skeleton input|output` prints the input or output skeleton.
 - Global options: `--output json|text|table` (default `json`), `--query <JMESPath>`, `--debug`, `--version`.
-- `help` works at every level: `po-plamo help`, `po-plamo po-file help`, `po-plamo po-file translate-po-files help`.
+- `help` works at every level: `plamo-tr-po help`, `plamo-tr-po po-file help`, `plamo-tr-po po-file translate-po-files help`.
 - Exit codes: 0 success, 252 invalid command or parameter (including a missing `--auth-file`), 254 a PO file cannot be read or parsed, has no usable `Language` header, or PLaMo Translate sign-in fails, 255 other failures such as an unreadable auth file.
 
 ## Install
 
 ```console
-$ nix run github:conao3/rust-po-plamo -- help
-$ cargo install --git https://github.com/conao3/rust-po-plamo
+$ nix run github:conao3/rust-plamo-tr-po -- help
+$ cargo install --git https://github.com/conao3/rust-plamo-tr-po
 ```
 
 ## Development

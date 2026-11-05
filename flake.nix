@@ -21,7 +21,7 @@
         { pkgs, ... }:
         {
           packages.default = pkgs.rustPlatform.buildRustPackage {
-            pname = "po-plamo";
+            pname = "plamo-tr-po";
             version = "0.1.0";
             src = pkgs.lib.cleanSource ./.;
             cargoLock = {
@@ -30,9 +30,9 @@
             };
             meta = {
               description = "Translate gettext PO files with PLaMo Translate";
-              homepage = "https://github.com/conao3/rust-po-plamo";
+              homepage = "https://github.com/conao3/rust-plamo-tr-po";
               license = pkgs.lib.licenses.asl20;
-              mainProgram = "po-plamo";
+              mainProgram = "plamo-tr-po";
               platforms = pkgs.lib.platforms.unix;
             };
           };

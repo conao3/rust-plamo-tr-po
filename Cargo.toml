@@ -1,10 +1,10 @@
 [package]
-name = "po-plamo"
+name = "plamo-tr-po"
 version = "0.1.0"
 edition = "2024"
 description = "Translate gettext PO files with PLaMo Translate"
 license = "Apache-2.0"
-repository = "https://github.com/conao3/rust-po-plamo"
+repository = "https://github.com/conao3/rust-plamo-tr-po"
 
 [dependencies]
 anyhow = "1.0.104"

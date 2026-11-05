@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`po-plamo` is a Rust CLI that fills gettext PO files with machine translations from PLaMo Translate through the `plamo-tr` library (`https://github.com/conao3/rust-plamo-tr`).
+`plamo-tr-po` is a Rust CLI that fills gettext PO files with machine translations from PLaMo Translate through the `plamo-tr` library (`https://github.com/conao3/rust-plamo-tr`).
 
 ## Layout
 
