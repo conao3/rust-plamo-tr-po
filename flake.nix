@@ -26,7 +26,7 @@
             src = pkgs.lib.cleanSource ./.;
             cargoLock = {
               lockFile = ./Cargo.lock;
-              outputHashes."plamo-tr-0.1.0" = "sha256-dhqyW7CiN/9NX52pZ7OBrnePc4veSnqG8aFqgrMKaEM=";
+              outputHashes."plamo-tr-0.1.0" = "sha256-E9Smp+gihBMRJ6RmGfZwv3/lDaFyUSA0Lb2ScFL9rK4=";
             };
             meta = {
               description = "Translate gettext PO files with PLaMo Translate";

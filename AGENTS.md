@@ -5,7 +5,7 @@
 ## Layout
 
 - `src/main.rs`: the command definitions (clap derive), collecting the entries to translate, batching, worker threads, periodic saving, and the output summary.
-- `src/grammar.rs`, `src/output.rs`, `src/error.rs`: the AWS CLI grammar (`file://` values, a trailing `help`, `--cli-input-json`, `--generate-cli-skeleton`), `--output` and `--query` rendering, and exit codes 252/254/255.
+- `src/grammar.rs`, `src/output.rs`, `src/error.rs`: the AWS CLI grammar (`file://` values, a trailing `help`), `--output` rendering, and exit codes 252/254/255.
 - `src/po.rs`: a line-preserving PO reader and writer. Only entries that receive a translation are rewritten.
 - `src/protect.rs`: placeholders (`<x-N/>`) for code elements in HTML msgids.
 

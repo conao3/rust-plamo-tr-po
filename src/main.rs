@@ -18,7 +18,6 @@ use regex::Regex;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::grammar::{CliInputArgs, SkeletonKind};
 use crate::output::{OutputFormat, Response};
 use crate::po::{PoFile, State};
 use crate::protect::{Protected, protect};
@@ -33,14 +32,6 @@ struct Cli {
     /// Output format
     #[arg(long, global = true, help_heading = "Global Options", value_enum, default_value_t = OutputFormat::Json)]
     output: OutputFormat,
-    /// JMESPath expression applied to the output
-    #[arg(
-        long,
-        global = true,
-        help_heading = "Global Options",
-        value_name = "JMESPATH"
-    )]
-    query: Option<String>,
     /// Print debug logs to stderr
     #[arg(long, global = true, help_heading = "Global Options")]
     debug: bool,
@@ -117,9 +108,6 @@ struct TranslatePoFilesArgs {
     /// Turn off --dry-run
     #[arg(long, overrides_with = "dry_run")]
     no_dry_run: bool,
-
-    #[command(flatten)]
-    input: CliInputArgs,
 }
 
 #[derive(Default, Serialize)]
@@ -475,51 +463,15 @@ fn to_value<T: Serialize>(value: &T) -> error::Result<Value> {
     serde_json::to_value(value).map_err(|error| error::other(error.to_string()))
 }
 
-fn output_skeleton(path: &[String]) -> error::Result<Value> {
-    match path.last().map(String::as_str) {
-        Some("translate-po-files") => to_value(&TranslatePoFilesOutput {
-            po_files: vec![String::new()],
-            ..TranslatePoFilesOutput::default()
-        }),
-        _ => Err(error::parameter(
-            "--generate-cli-skeleton needs a command and a subcommand",
-        )),
-    }
-}
-
 fn run() -> error::Result<()> {
     let mut root = Cli::command();
     root.build();
-    let prepared = grammar::prepare(&root, std::env::args_os().collect())?;
-    if prepared.argv.iter().any(|token| token == "--debug") {
-        eprintln!("debug: argv {:?}", &prepared.argv[1..]);
+    let argv = grammar::prepare(&root, std::env::args_os().collect())?;
+    if argv.iter().any(|token| token == "--debug") {
+        eprintln!("debug: argv {:?}", &argv[1..]);
     }
 
-    if let Some(kind) = prepared.skeleton {
-        let mut command = &root;
-        for name in &prepared.path {
-            command = command
-                .find_subcommand(name)
-                .ok_or_else(|| error::other(format!("unknown subcommand {name}")))?;
-        }
-        if command.has_subcommands() {
-            return Err(error::parameter(
-                "--generate-cli-skeleton needs a command and a subcommand",
-            ));
-        }
-        let value = match kind {
-            SkeletonKind::Input => grammar::input_skeleton(command),
-            SkeletonKind::Output => output_skeleton(&prepared.path)?,
-        };
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&value)
-                .map_err(|error| error::other(error.to_string()))?
-        );
-        return Ok(());
-    }
-
-    let cli = match Cli::try_parse_from(&prepared.argv) {
+    let cli = match Cli::try_parse_from(&argv) {
         Ok(cli) => cli,
         Err(error) => {
             let code = if error.use_stderr() { 252 } else { 0 };
@@ -528,9 +480,6 @@ fn run() -> error::Result<()> {
         }
     };
 
-    if let Some(query) = &cli.query {
-        output::compile_query(query)?;
-    }
     let Command::PoFile(PoFileCommand::TranslatePoFiles(args)) = cli.command;
     if args.batch_size == 0 || args.jobs == 0 {
         return Err(error::parameter(
@@ -548,8 +497,7 @@ fn run() -> error::Result<()> {
         output::render(
             "TranslatePoFiles",
             Response { value, text: None },
-            cli.output,
-            cli.query.as_deref()
+            cli.output
         )?
     );
     Ok(())

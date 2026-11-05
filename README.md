@@ -82,8 +82,7 @@ When PLaMo Translate rejects a batch or the request fails, plamo-tr-po retries i
 Commands follow the AWS CLI grammar: `plamo-tr-po [global options] <command> <subcommand> [--parameter value ...]`.
 
 - plamo-tr-po reads a value starting with `file://` from that file, and `file:///dev/stdin` reads standard input.
-- `--cli-input-json file://input.json` passes the parameters as a JSON object keyed by the PascalCase parameter names (`{"PoFiles": ["po/emacs.ja.po"], "DryRun": true}`). Parameters on the command line take precedence. `--generate-cli-skeleton input|output` prints the input or output skeleton.
-- Global options: `--output json|text|table` (default `json`), `--query <JMESPath>`, `--debug`, `--version`.
+- Global options: `--output json|text|table` (default `json`), `--debug`, `--version`.
 - `help` works at each level: `plamo-tr-po help`, `plamo-tr-po po-file help`, `plamo-tr-po po-file translate-po-files help`.
 
 | Exit code | Meaning |
