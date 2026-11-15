@@ -26,8 +26,10 @@
             src = pkgs.lib.cleanSource ./.;
             cargoLock = {
               lockFile = ./Cargo.lock;
-              outputHashes."plamo-tr-0.1.0" = "sha256-E9Smp+gihBMRJ6RmGfZwv3/lDaFyUSA0Lb2ScFL9rK4=";
+              outputHashes."plamo-tr-0.1.0" = "sha256-vgRnHNgFi4hSuCeEWmq3EW1N01kveOkHxFSOtY84Eis=";
             };
+            nativeBuildInputs = [ pkgs.pkg-config ];
+            buildInputs = [ pkgs.aws-lc ];
             meta = {
               description = "Translate gettext PO files with PLaMo Translate";
               homepage = "https://github.com/conao3/rust-plamo-tr-po";
