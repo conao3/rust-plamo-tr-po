@@ -26,7 +26,7 @@
             src = pkgs.lib.cleanSource ./.;
             cargoLock = {
               lockFile = ./Cargo.lock;
-              outputHashes."plamo-tr-0.1.0" = "sha256-VVDfTjLgZHPlFTXRNfn1geyW6t2boil6uCKUCU+XtJI=";
+              outputHashes."plamo-tr-0.1.0" = "sha256-mtnJ3X6op0jVH2E/J6arim2Mkq6PWqdh8YjuO/MbEpw=";
             };
             nativeBuildInputs = [ pkgs.pkg-config ];
             buildInputs = [ pkgs.aws-lc ];
