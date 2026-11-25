@@ -11,9 +11,9 @@
 </p>
 
 <p align="center">
-  <a href="#usage">Usage</a> ·
-  <a href="#command-line">Command line</a> ·
-  <a href="#install">Install</a> ·
+  <a href="#usage">Usage</a> |
+  <a href="#command-line">Command line</a> |
+  <a href="#install">Install</a> |
   <a href="#development">Development</a>
 </p>
 
